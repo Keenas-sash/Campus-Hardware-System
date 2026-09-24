@@ -5,13 +5,15 @@ import re
 from typing import Optional
 from contextlib import closing
 from pydantic import BaseModel, Field, field_validator
+import psycopg
+from psycopg.rows import dict_row
 
 # =========================================================
 # Database Connection & Initialization
 # =========================================================
 
 def get_connection():
-    return sqlite3.connect("campus_hardware.db")
+    return psycopg.connect(os.getenv("DATABASE_URL"))
 
 def hash_password(password: str, salt: Optional[str] = None):
     if not salt:
