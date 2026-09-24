@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Borrow Requests - Campus Hardware System</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('inventory') }}">Campus Hardware System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory') }}">Inventory</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="{{ url_for('borrow_logs') }}">Borrow Requests</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('maintenance') }}">Maintenance</a></li>
+                    {% if session.role == 'ADMIN' %}
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('admin_lockouts') }}">Lockouts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('audit_logs') }}">Audit Logs</a></li>
+                    {% endif %}
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('profile') }}">Profile</a></li>
+                    <li class="nav-item"><a class="nav-link text-danger" href="{{ url_for('logout') }}">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>Borrow Requests & Approvals</h2>
+            <a href="{{ url_for('export_csv', table_name='borrow') }}" class="btn btn-outline-secondary">Export CSV</a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <!-- Filter Controls -->
+        <div class="mb-3">
+            <a href="{{ url_for('borrow_logs', status='ALL') }}" class="btn btn-sm btn-outline-dark">All</a>
+            <a href="{{ url_for('borrow_logs', status='PENDING') }}" class="btn btn-sm btn-outline-warning">Pending Approval</a>
+            <a href="{{ url_for('borrow_logs', status='BORROWED') }}" class="btn btn-sm btn-outline-info">Active Borrows</a>
+            <a href="{{ url_for('borrow_logs', status='RETURNED') }}" class="btn btn-sm btn-outline-success">Returned</a>
+        </div>
+
+        <!-- Borrow Requests Table -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>#</th>
+                                <th>Item Name</th>
+                                <th>Borrower</th>
+                                <th>Contact</th>
+                                <th>Qty</th>
+                                <th>Borrow Date</th>
+                                <th>Expected Return</th>
+                                <th>Status</th>
+                                {% if session.role in ['ADMIN', 'INVENTORY_SPECIALIST'] %}
+                                <th>Action</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for borrow in borrows %}
+                            <tr>
+                                <td>{{ borrow.id }}</td>
+                                <td>
+                                    <strong>{{ borrow.item_name }}</strong>
+                                </td>
+                                <td>{{ borrow.borrower_name }}</td>
+                                <td>{{ borrow.borrower_contact }}</td>
+                                <td>{{ borrow.quantity_borrowed }}</td>
+                                <td><small>{{ borrow.borrow_date }}</small></td>
+                                <td><small>{{ borrow.expected_return_date }}</small></td>
+                                <td>
+                                    {% if borrow.status == 'PENDING' %}
+                                        <span class="badge bg-warning text-dark">PENDING</span>
+                                    {% elif borrow.status == 'BORROWED' %}
+                                        <span class="badge bg-info text-dark">BORROWED</span>
+                                    {% elif borrow.status == 'RETURNED' %}
+                                        <span class="badge bg-success">RETURNED</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ borrow.status }}</span>
+                                    {% endif %}
+                                </td>
+                                {% if session.role in ['ADMIN', 'INVENTORY_SPECIALIST'] %}
+                                <td>
+                                    {% if borrow.status == 'PENDING' %}
+                                    <form action="{{ url_for('approve_borrow', borrow_id=borrow.id) }}" method="POST" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Confirm borrow request approval?');">Approve Request</button>
+                                    </form>
+                                    {% elif borrow.status == 'BORROWED' %}
+                                    <form action="{{ url_for('return_borrowed_item', borrow_id=borrow.id) }}" method="POST" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Confirm item return?')">Approve Return</button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="9" class="text-center py-4 text-muted">No borrow requests found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

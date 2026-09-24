@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audit Logs - Campus Hardware</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Campus Hardware System</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="{{ url_for('inventory') }}">Inventory</a>
+                <a class="nav-link" href="{{ url_for('borrow_logs') }}">Borrow Requests</a>
+                <a class="nav-link" href="{{ url_for('maintenance') }}">Maintenance</a>
+                <a class="nav-link" href="{{ url_for('admin_lockouts') }}">Lockouts</a>
+                <a class="nav-link active" href="{{ url_for('audit_logs') }}">Audit Logs</a>
+                <a class="nav-link" href="{{ url_for('profile') }}">Profile</a>
+                <a class="nav-link text-danger" href="{{ url_for('logout') }}">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>System Audit Logs</h2>
+            <a href="{{ url_for('export_csv', table_name='audit') }}" class="btn btn-outline-secondary">Export CSV</a>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Log ID</th>
+                            <th>Timestamp</th>
+                            <th>Performed By</th>
+                            <th>Action</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td>{{ log[0] }}</td>
+                            <td><code>{{ log[1] }}</code></td>
+                            <td><strong>{{ log[2] }}</strong></td>
+                            <td><span class="badge bg-primary">{{ log[3] }}</span></td>
+                            <td>{{ log[4] }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">No audit logs available.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Lockouts - Campus Hardware System</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('inventory') }}">Campus Hardware System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('inventory') }}">Inventory</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('borrow_logs') }}">Borrow Requests</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('maintenance') }}">Maintenance</a></li>
+                    {% if session.role == 'ADMIN' %}
+                    <li class="nav-item"><a class="nav-link active" href="{{ url_for('admin_lockouts') }}">Lockouts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('audit_logs') }}">Audit Logs</a></li>
+                    {% endif %}
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('profile') }}">Profile</a></li>
+                    <li class="nav-item"><a class="nav-link text-danger" href="{{ url_for('logout') }}">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>User Lockouts Management</h2>
+            <a href="{{ url_for('export_csv', table_name='lockouts') }}" class="btn btn-outline-secondary">Export CSV</a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <!-- Lockouts Table -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>#</th>
+                                <th>Username</th>
+                                <th>Reason / Attempts</th>
+                                <th>Locked Until</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lockout in lockouts %}
+                            <tr>
+                                <td>{{ lockout.id }}</td>
+                                <td><strong>{{ lockout.username }}</strong></td>
+                                <td>{{ lockout.reason }}</td>
+                                <td><small>{{ lockout.locked_until }}</small></td>
+                                <td>
+                                    <form action="{{ url_for('unlock_user', user_id=lockout.id) }}" method="POST" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to unlock this user?')">
+                                            Unlock
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center py-4 text-muted">No locked accounts found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

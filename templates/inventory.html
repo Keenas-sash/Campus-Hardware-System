@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Management - Campus Hardware</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('inventory') }}">Campus Hardware System</a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link active" href="{{ url_for('inventory') }}">Inventory</a>
+                <a class="nav-link" href="{{ url_for('borrow_logs') }}">Borrow Requests</a>
+                <a class="nav-link" href="{{ url_for('maintenance') }}">Maintenance</a>
+                
+                {% if session.role == 'ADMIN' %}
+                <a class="nav-link" href="{{ url_for('admin_lockouts') }}">Lockouts</a>
+                <a class="nav-link" href="{{ url_for('audit_logs') }}">Audit Logs</a>
+                {% endif %}
+                
+                <a class="nav-link" href="{{ url_for('profile') }}">Profile</a>
+                <a class="nav-link text-danger" href="{{ url_for('logout') }}">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>Hardware Inventory</h2>
+            <div>
+                <a href="{{ url_for('export_csv', table_name='inventory') }}" class="btn btn-outline-secondary">Export CSV</a>
+            </div>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <!-- Search and Filter Bar -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-body">
+                <form method="GET" action="{{ url_for('inventory') }}" class="row g-3">
+                    <div class="col-md-4">
+                        <input type="text" name="search" class="form-control" placeholder="Search name, serial, or location..." value="{{ search }}">
+                    </div>
+                    <div class="col-md-3">
+                        <select name="category" class="form-select">
+                            <option value="ALL">All Categories</option>
+                            {% for cat in categories %}
+                                <option value="{{ cat }}" {% if cat == cat_filter %}selected{% endif %}>{{ cat }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select name="stock" class="form-select">
+                            <option value="ALL" {% if stock_filter == 'ALL' %}selected{% endif %}>All Stock Levels</option>
+                            <option value="IN_STOCK" {% if stock_filter == 'IN_STOCK' %}selected{% endif %}>In Stock</option>
+                            <option value="LOW_STOCK" {% if stock_filter == 'LOW_STOCK' %}selected{% endif %}>Low Stock</option>
+                            <option value="NO_STOCK" {% if stock_filter == 'NO_STOCK' %}selected{% endif %}>Out of Stock</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">Filter</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Add Item Form (Admin / Specialist) -->
+        {% if session.role in ['ADMIN', 'INVENTORY_SPECIALIST'] %}
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Add New Inventory Item</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_inventory') }}" method="POST" class="row g-3">
+                    <div class="col-md-3">
+                        <input type="text" name="item_name" class="form-control" placeholder="Item Name" required>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" name="category" class="form-control" placeholder="Category" required>
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" name="serial_number" class="form-control" placeholder="Serial Number" required>
+                    </div>
+                    <div class="col-md-1">
+                        <input type="number" name="quantity" class="form-control" placeholder="Qty" value="1" min="0" required>
+                    </div>
+                    <div class="col-md-1">
+                        <input type="number" name="min_stock" class="form-control" placeholder="Min" value="1" min="0" required>
+                    </div>
+                    <div class="col-md-1">
+                        <input type="number" name="max_stock" class="form-control" placeholder="Max" value="10" min="1" required>
+                    </div>
+                    <div class="col-md-1">
+                        <input type="text" name="location" class="form-control" placeholder="Loc" required>
+                    </div>
+                    <div class="col-12 text-end">
+                        <button type="submit" class="btn btn-success px-4">Add Item</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Inventory Table -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>#</th>
+                            <th>Item Name</th>
+                            <th>Category</th>
+                            <th>Serial Number</th>
+                            <th>Stock (Qty / Min / Max)</th>
+                            <th>Location</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td>{{ item.id }}</td>
+                            <td><strong>{{ item.item_name }}</strong></td>
+                            <td>{{ item.category }}</td>
+                            <td><code>{{ item.serial_number }}</code></td>
+                            <td>
+                                <strong>{{ item.quantity }}</strong> / {{ item.min_stock }} / {{ item.max_stock }}
+                                {% if item.stock_level == 'NO_STOCK' %}
+                                    <span class="badge bg-danger ms-1">OUT OF STOCK</span>
+                                {% elif item.stock_level == 'LOW_STOCK' %}
+                                    <span class="badge bg-warning text-dark ms-1">LOW STOCK</span>
+                                {% else %}
+                                    <span class="badge bg-success ms-1">IN STOCK</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ item.location }}</td>
+                            <td><span class="badge bg-secondary">{{ item.status }}</span></td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    {% if item.quantity > 0 and item.status != 'MAINTENANCE' %}
+                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#requestModal{{ item.id }}">
+                                        Request
+                                    </button>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm btn-secondary" disabled>Unavailable</button>
+                                    {% endif %}
+
+                                    {% if session.role in ['ADMIN', 'INVENTORY_SPECIALIST'] %}
+                                    <button type="button" class="btn btn-sm btn-warning ms-1" data-bs-toggle="modal" data-bs-target="#editModal{{ item.id }}">Edit</button>
+
+                                    <form action="{{ url_for('delete_inventory', item_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this item?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger ms-1">Delete</button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+
+                        <!-- Edit Modal -->
+                        {% if session.role in ['ADMIN', 'INVENTORY_SPECIALIST'] %}
+                        <div class="modal fade" id="editModal{{ item.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header bg-warning">
+                                        <h5 class="modal-title">Edit Item: {{ item.item_name }}</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <form action="{{ url_for('update_inventory_item', item_id=item.id) }}" method="POST">
+                                        <div class="modal-body text-start">
+                                            <div class="mb-3">
+                                                <label class="form-label">Item Name</label>
+                                                <input type="text" name="item_name" class="form-control" value="{{ item.item_name }}" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Category</label>
+                                                <input type="text" name="category" class="form-control" value="{{ item.category }}" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Serial Number</label>
+                                                <input type="text" name="serial_number" class="form-control" value="{{ item.serial_number }}">
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-4 mb-3">
+                                                    <label class="form-label">Quantity</label>
+                                                    <input type="number" name="quantity" class="form-control" value="{{ item.quantity }}" min="0" required>
+                                                </div>
+                                                <div class="col-md-4 mb-3">
+                                                    <label class="form-label">Min Stock</label>
+                                                    <input type="number" name="min_stock" class="form-control" value="{{ item.min_stock }}" min="0" required>
+                                                </div>
+                                                <div class="col-md-4 mb-3">
+                                                    <label class="form-label">Max Stock</label>
+                                                    <input type="number" name="max_stock" class="form-control" value="{{ item.max_stock }}" min="1" required>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Location</label>
+                                                <input type="text" name="location" class="form-control" value="{{ item.location }}">
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Borrow Request Modals -->
+    {% for item in items %}
+    {% if item.quantity > 0 and item.status != 'MAINTENANCE' %}
+    <div class="modal fade" id="requestModal{{ item.id }}" tabindex="-1" aria-labelledby="requestModalLabel{{ item.id }}" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title" id="requestModalLabel{{ item.id }}">Request Item: {{ item.item_name }}</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{{ url_for('request_borrow') }}" method="POST">
+                    <div class="modal-body text-start">
+                        <input type="hidden" name="item_id" value="{{ item.id }}">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Borrower Username</label>
+                            <input type="text" class="form-control" value="{{ session.username }}" disabled>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Contact Information</label>
+                            <input type="text" name="borrower_contact" class="form-control" placeholder="Email or Phone Number" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Quantity to Borrow</label>
+                            <input type="number" name="quantity_borrowed" class="form-control" min="1" max="{{ item.quantity }}" value="1" required>
+                            <div class="form-text">Available stock: {{ item.quantity }}</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Expected Return Date</label>
+                            <input type="date" name="expected_return_date" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Submit Request</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
