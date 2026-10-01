@@ -16,13 +16,20 @@ from flask import (
 
 from db_models import get_connection, hash_password, init_db, BorrowRequestSchema
 from auth_controller import AuthController
+# In app.py
 from main_view import (
-    InventoryTab,
-    MaintenanceTab,
-    LockoutApprovalTab,
-    AuditLogTab,
-    ProfileSettingsTab,
-    BorrowReturnTab
+    load_inventory,
+    add_inventory_item,
+    update_inventory_item,
+    delete_inventory_item,
+    submit_borrow_request,
+    load_borrow_requests,
+    approve_request,
+    reject_request,
+    load_maintenance_logs,
+    add_maintenance_log,
+    load_audit_logs,
+    export_inventory_to_csv
 )
 
 app = Flask(__name__)
