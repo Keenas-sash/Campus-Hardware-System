@@ -2,6 +2,9 @@ import os
 import csv
 import io
 import datetime
+import smtplib 
+import random 
+from email.mime.text import MIMEText 
 from contextlib import closing
 from flask import (
     Flask,
@@ -20,24 +23,23 @@ from auth_controller import AuthController
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-```python 
-import smtplib 
-import random 
-from email.mime.text import MIMEText 
-
 # --- BREVO SMTP CONFIGURATION --- 
-SMTP_SERVER = "smtp-relay.brevo.com" 
-SMTP_PORT = 2525 
+# Dynamically pulls credentials from environment variables
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp-relay.brevo.com") 
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587)) 
 
-# TODO: Replace these with your actual Brevo SMTP Login and Master Password 
-SMTP_LOGIN = "your-email@example.com"        
-SMTP_PASSWORD = "your-brevo-master-password"  
+SMTP_LOGIN = os.getenv("SMTP_LOGIN")        
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  
+SENDER_EMAIL = os.getenv("MAIL_DEFAULT_SENDER", "your-verified-sender@example.com")
 
 def send_otp_email(receiver_email, otp, intent): 
     """Sends a 6-digit OTP using Brevo SMTP.""" 
-    msg = MIMEText(f"Your {intent} One-Time Password (OTP) is: {otp}\n\nPlease enter this code to proceed. Do not share this code with anyone.") 
+    msg = MIMEText(
+        f"Your {intent} One-Time Password (OTP) is: {otp}\n\n"
+        "Please enter this code to proceed. Do not share this code with anyone."
+    ) 
     msg['Subject'] = f"Laboratory System - {intent} OTP" 
-    msg['From'] = "your-actual-email@gmail.com"  # Replace with your verified Brevo email 
+    msg['From'] = SENDER_EMAIL 
     msg['To'] = receiver_email 
 
     try: 
@@ -113,7 +115,6 @@ def register():
     if not username or not email or not password: 
         flash("All registration fields are required.", "danger") 
         return redirect(url_for("register")) 
- 
 
     # Generate OTP and save to session 
     otp = str(random.randint(100000, 999999)) 
@@ -126,6 +127,7 @@ def register():
         flash("Failed to send OTP email. Please try again.", "danger") 
         return redirect(url_for("register")) 
 
+
 @app.route("/reset-request", methods=["GET", "POST"]) 
 def reset_request(): 
     if request.method == "GET": 
@@ -155,65 +157,6 @@ def reset_request():
         flash("Failed to send OTP email. Please try again.", "danger") 
         return redirect(url_for("reset_request")) 
 
-@app.route("/reset-request", methods=["GET", "POST"]) 
-
-def reset_request(): 
-
-    if request.method == "GET": 
-
-        return render_template("reset.html") 
-
- 
-
-    username = request.form.get("username", "").strip() 
-
-    email = request.form.get("email", "").strip() 
-
-    new_password = request.form.get("new_password", "").strip() 
-
-    confirm_password = request.form.get("confirm_password", "").strip() 
-
- 
-
-    if not username or not email or not new_password or not confirm_password: 
-
-        flash("All reset fields are required.", "danger") 
-
-        return redirect(url_for("reset_request")) 
-
- 
-
-    if new_password != confirm_password: 
-
-        flash("New passwords do not match.", "danger") 
-
-        return redirect(url_for("reset_request")) 
-
- 
-
-    # Generate OTP and save to session 
-
-    otp = str(random.randint(100000, 999999)) 
-
-    session['pending_reset'] = {'username': username, 'email': email, 'new_password': new_password, 'otp': otp} 
-
-     
-
-    if send_otp_email(email, otp, intent="Password Reset"): 
-
-        flash("We sent a 6-digit code to your email. Please verify.", "info") 
-
-        return redirect(url_for("verify_otp", action="reset")) 
-
-    else: 
-
-        flash("Failed to send OTP email. Please try again.", "danger") 
-
-        return redirect(url_for("reset_request")) 
-
- 
-
- 
 
 @app.route("/verify-otp/<action>", methods=["GET", "POST"]) 
 def verify_otp(action): 
@@ -230,20 +173,21 @@ def verify_otp(action):
         if user_otp == data['otp']: 
             if action == "register": 
                 # OTP matches, create the user 
-                ok, msg = AuthController.register_user(data['username'], data['email'], data['password'], role=data['role']) 
+                ok, msg = auth.register_user(data['username'], data['email'], data['password'], role=data['role']) 
                 session.pop(session_key, None) 
                 flash("Account successfully verified and created!", "success" if ok else "warning") 
                 return redirect(url_for("login")) 
 
             elif action == "reset": 
                 # OTP matches, submit the reset request to Admin 
-                ok, msg = AuthController.submit_password_reset_request(data['username'], data['email'], data['new_password']) 
+                ok, msg = auth.submit_password_reset_request(data['username'], data['email'], data['new_password']) 
                 session.pop(session_key, None) 
                 flash("Email verified! Your password reset request has been submitted.", "success" if ok else "danger") 
                 return redirect(url_for("login")) 
                 
         else: 
             flash("Invalid OTP code. Try again.", "danger") 
+            
     return render_template("otp_verify.html", action_url=url_for('verify_otp', action=action)) 
 
 
@@ -530,6 +474,7 @@ def request_borrow():
         flash("Borrow request submitted successfully! Pending approval.", "success")
         
     return redirect(url_for("borrow_logs"))
+
 
 @app.route("/borrow/approve/<int:borrow_id>", methods=["POST"])
 def approve_borrow(borrow_id):
