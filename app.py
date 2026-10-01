@@ -24,7 +24,6 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
 # --- BREVO SMTP CONFIGURATION --- 
-# Dynamically pulls credentials from environment variables
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp-relay.brevo.com") 
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587)) 
 
@@ -43,10 +42,17 @@ def send_otp_email(receiver_email, otp, intent):
     msg['To'] = receiver_email 
 
     try: 
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server: 
-            server.starttls() 
-            server.login(SMTP_LOGIN, SMTP_PASSWORD) 
-            server.send_message(msg) 
+        if SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+                if SMTP_LOGIN and SMTP_PASSWORD:
+                    server.login(SMTP_LOGIN, SMTP_PASSWORD)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+                server.starttls()
+                if SMTP_LOGIN and SMTP_PASSWORD:
+                    server.login(SMTP_LOGIN, SMTP_PASSWORD)
+                server.send_message(msg)
             
         return True 
     except Exception as e: 
@@ -160,7 +166,6 @@ def reset_request():
 
 @app.route("/verify-otp/<action>", methods=["GET", "POST"]) 
 def verify_otp(action): 
-    # Determine which session data to use 
     session_key = 'pending_user' if action == "register" else 'pending_reset' 
     if session_key not in session: 
         flash("Session expired. Please try again.", "warning") 
@@ -172,14 +177,12 @@ def verify_otp(action):
 
         if user_otp == data['otp']: 
             if action == "register": 
-                # OTP matches, create the user 
                 ok, msg = auth.register_user(data['username'], data['email'], data['password'], role=data['role']) 
                 session.pop(session_key, None) 
                 flash("Account successfully verified and created!", "success" if ok else "warning") 
                 return redirect(url_for("login")) 
 
             elif action == "reset": 
-                # OTP matches, submit the reset request to Admin 
                 ok, msg = auth.submit_password_reset_request(data['username'], data['email'], data['new_password']) 
                 session.pop(session_key, None) 
                 flash("Email verified! Your password reset request has been submitted.", "success" if ok else "danger") 
@@ -318,7 +321,6 @@ def add_inventory():
 
 @app.route("/inventory/update/<int:item_id>", methods=["POST"])
 def update_inventory_item(item_id):
-    """Allows ADMIN and INVENTORY_SPECIALIST to update existing inventory details."""
     if session.get("role") not in ["ADMIN", "INVENTORY_SPECIALIST"]:
         flash("Unauthorized action.", "danger")
         return redirect(url_for("inventory"))
@@ -420,7 +422,6 @@ def borrow_logs():
 
 @app.route("/borrow/request", methods=["POST"])
 def request_borrow():
-    """Handles borrow requests from viewers (PENDING) or direct issuance by admins/specialists (BORROWED)."""
     if "username" not in session:
         return redirect(url_for("login"))
 
@@ -478,7 +479,6 @@ def request_borrow():
 
 @app.route("/borrow/approve/<int:borrow_id>", methods=["POST"])
 def approve_borrow(borrow_id):
-    """Allows ADMIN and INVENTORY_SPECIALIST to approve/issue pending requests."""
     if session.get("role") not in ["ADMIN", "INVENTORY_SPECIALIST"]:
         flash("Unauthorized action.", "danger")
         return redirect(url_for("borrow_logs"))
@@ -519,7 +519,6 @@ def approve_borrow(borrow_id):
 
 @app.route("/borrow/return/<int:borrow_id>", methods=["POST"])
 def return_borrowed_item(borrow_id):
-    """Allows ADMIN and INVENTORY_SPECIALIST to process item returns."""
     if session.get("role") not in ["ADMIN", "INVENTORY_SPECIALIST"]:
         flash("Unauthorized action.", "danger")
         return redirect(url_for("borrow_logs"))
@@ -545,13 +544,13 @@ def return_borrowed_item(borrow_id):
     flash("Item returned successfully and inventory updated!", "success")
     return redirect(url_for("borrow_logs"))
 
+
 # =========================================================
 # Maintenance Routes
 # =========================================================
 
 @app.route("/maintenance")
 def maintenance():
-    """Displays maintenance logs and allows filtering or viewing item health."""
     if "username" not in session:
         return redirect(url_for("login"))
 
@@ -581,7 +580,6 @@ def maintenance():
 
 @app.route("/maintenance/add", methods=["POST"])
 def add_maintenance():
-    """Allows users/admins to report an item issue for maintenance."""
     if "username" not in session:
         return redirect(url_for("login"))
 
@@ -618,7 +616,6 @@ def add_maintenance():
 
 @app.route("/maintenance/resolve/<int:log_id>", methods=["POST"])
 def resolve_maintenance(log_id):
-    """Allows ADMIN and INVENTORY_SPECIALIST to mark a maintenance ticket as resolved."""
     if session.get("role") not in ["ADMIN", "INVENTORY_SPECIALIST"]:
         flash("Unauthorized action.", "danger")
         return redirect(url_for("maintenance"))
@@ -644,6 +641,7 @@ def resolve_maintenance(log_id):
     log_audit_action(session["username"], "RESOLVE_MAINTENANCE", f"Resolved maintenance ticket ID #{log_id}")
     flash("Maintenance ticket marked as resolved and item restored to inventory!", "success")
     return redirect(url_for("maintenance"))
+
 
 # =========================================================
 # Admin-Only Routes
