@@ -15,7 +15,7 @@ from flask import (
 )
 
 from db_models import get_connection, hash_password, init_db, BorrowRequestSchema
-from login_view import AuthController
+from auth_controller import AuthController
 from main_view import (
     InventoryTab,
     MaintenanceTab,
@@ -535,7 +535,7 @@ def add_maintenance():
         
         if not item:
             flash("Selected item not found.", "danger")
-            return redirect(url_for("maintenance_logs"))
+            return redirect(url_for("maintenance"))
             
         item_name = item[0]
 
@@ -549,7 +549,7 @@ def add_maintenance():
 
     log_audit_action(session["username"], "REPORT_MAINTENANCE", f"Reported maintenance issue for {item_name}")
     flash("Maintenance ticket submitted successfully!", "success")
-    return redirect(url_for("maintenance_logs"))
+    return redirect(url_for("maintenance"))
 
 
 @app.route("/maintenance/resolve/<int:log_id>", methods=["POST"])
@@ -557,7 +557,7 @@ def resolve_maintenance(log_id):
     """Allows ADMIN and INVENTORY_SPECIALIST to mark a maintenance ticket as resolved."""
     if session.get("role") not in ["ADMIN", "INVENTORY_SPECIALIST"]:
         flash("Unauthorized action.", "danger")
-        return redirect(url_for("maintenance_logs"))
+        return redirect(url_for("maintenance"))
 
     resolution_notes = request.form.get("resolution_notes", "").strip()
 
@@ -579,7 +579,7 @@ def resolve_maintenance(log_id):
 
     log_audit_action(session["username"], "RESOLVE_MAINTENANCE", f"Resolved maintenance ticket ID #{log_id}")
     flash("Maintenance ticket marked as resolved and item restored to inventory!", "success")
-    return redirect(url_for("maintenance_logs"))
+    return redirect(url_for("maintenance"))
 
 # =========================================================
 # Admin-Only Routes
