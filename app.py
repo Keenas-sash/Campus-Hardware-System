@@ -16,21 +16,6 @@ from flask import (
 
 from db_models import get_connection, hash_password, init_db, BorrowRequestSchema
 from auth_controller import AuthController
-# In app.py
-from main_view import (
-    load_inventory,
-    add_inventory_item,
-    update_inventory_item,
-    delete_inventory_item,
-    submit_borrow_request,
-    load_borrow_requests,
-    approve_request,
-    reject_request,
-    load_maintenance_logs,
-    add_maintenance_log,
-    load_audit_logs,
-    export_inventory_to_csv
-)
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -49,7 +34,7 @@ def log_audit_action(user: str, action: str, details: str):
         with closing(get_connection()) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO audit_logs (timestamp, performed_by, action, details) VALUES (?, ?, ?, ?)",
+                "INSERT INTO audit_logs (timestamp, performed_by, action, details) VALUES (%s, %s, %s, %s)",
                 (now, user, action, details),
             )
             conn.commit()
@@ -151,16 +136,16 @@ def inventory():
     query = """
         SELECT id, item_name, category, serial_number, quantity, min_stock, max_stock, location, status, added_by, added_at 
         FROM inventory 
-        WHERE (item_name LIKE ? OR serial_number LIKE ? OR location LIKE ?)
+        WHERE (item_name LIKE %s OR serial_number LIKE %s OR location LIKE %s)
     """
     params = [f"%{search}%", f"%{search}%", f"%{search}%"]
 
     if cat_filter != "ALL":
-        query += " AND category = ?"
+        query += " AND category = %s"
         params.append(cat_filter)
 
     if stat_filter != "ALL":
-        query += " AND status = ?"
+        query += " AND status = %s"
         params.append(stat_filter)
 
     query += " ORDER BY added_at DESC"
@@ -238,7 +223,7 @@ def add_inventory():
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO inventory (item_name, category, serial_number, quantity, min_stock, max_stock, location, status, added_by, added_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'AVAILABLE', ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'AVAILABLE', %s, %s)
             """, (item_name, category, serial, qty, min_stock, max_stock, location, session["username"], now))
             conn.commit()
 
@@ -271,8 +256,8 @@ def update_inventory_item(item_id):
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE inventory 
-            SET item_name = ?, category = ?, serial_number = ?, quantity = ?, min_stock = ?, max_stock = ?, location = ?, status = ?
-            WHERE id = ?
+            SET item_name = %s, category = %s, serial_number = %s, quantity = %s, min_stock = %s, max_stock = %s, location = %s, status = %s
+            WHERE id = %s
         """, (item_name, category, serial_number, quantity, min_stock, max_stock, location, new_status, item_id))
         conn.commit()
 
@@ -289,7 +274,7 @@ def delete_inventory(item_id):
 
     with closing(get_connection()) as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM inventory WHERE id=?", (item_id,))
+        cursor.execute("DELETE FROM inventory WHERE id=%s", (item_id,))
         conn.commit()
 
     log_audit_action(session["username"], "DELETE_INVENTORY", f"Deleted Item ID #{item_id}")
@@ -317,11 +302,11 @@ def borrow_logs():
     where_clauses = []
 
     if role == "VIEWER":
-        where_clauses.append("borrower_name = ?")
+        where_clauses.append("borrower_name = %s")
         params.append(session["username"])
 
     if status_filter != "ALL":
-        where_clauses.append("status = ?")
+        where_clauses.append("status = %s")
         params.append(status_filter)
 
     if where_clauses:
@@ -370,7 +355,7 @@ def request_borrow():
 
     with closing(get_connection()) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT item_name, serial_number, quantity FROM inventory WHERE id = ?", (item_id,))
+        cursor.execute("SELECT item_name, serial_number, quantity FROM inventory WHERE id = %s", (item_id,))
         item = cursor.fetchone()
 
         if not item:
@@ -389,14 +374,14 @@ def request_borrow():
             
             new_qty = current_qty - qty_borrowed
             new_inv_status = 'OUT_OF_STOCK' if new_qty == 0 else 'AVAILABLE'
-            cursor.execute("UPDATE inventory SET quantity = ?, status = ? WHERE id = ?", (new_qty, new_inv_status, item_id))
+            cursor.execute("UPDATE inventory SET quantity = %s, status = %s WHERE id = %s", (new_qty, new_inv_status, item_id))
         else:
             status = "PENDING"
             issued_by = "Pending"
 
         cursor.execute("""
             INSERT INTO borrow_logs (item_id, item_name, serial_number, borrower_name, borrower_contact, quantity_borrowed, borrow_date, expected_return_date, status, issued_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (item_id, item_name, serial_number, borrower_name, borrower_contact, qty_borrowed, now, expected_return, status, issued_by))
         conn.commit()
 
@@ -418,7 +403,7 @@ def approve_borrow(borrow_id):
 
     with closing(get_connection()) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT item_id, quantity_borrowed, status FROM borrow_logs WHERE id = ?", (borrow_id,))
+        cursor.execute("SELECT item_id, quantity_borrowed, status FROM borrow_logs WHERE id = %s", (borrow_id,))
         borrow = cursor.fetchone()
 
         if not borrow or borrow[2] != "PENDING":
@@ -427,7 +412,7 @@ def approve_borrow(borrow_id):
 
         item_id, qty_borrowed, _ = borrow
 
-        cursor.execute("SELECT quantity FROM inventory WHERE id = ?", (item_id,))
+        cursor.execute("SELECT quantity FROM inventory WHERE id = %s", (item_id,))
         stock = cursor.fetchone()
 
         if not stock or stock[0] < qty_borrowed:
@@ -437,11 +422,11 @@ def approve_borrow(borrow_id):
         new_qty = stock[0] - qty_borrowed
         new_status = 'OUT_OF_STOCK' if new_qty == 0 else 'AVAILABLE'
 
-        cursor.execute("UPDATE inventory SET quantity = ?, status = ? WHERE id = ?", (new_qty, new_status, item_id))
+        cursor.execute("UPDATE inventory SET quantity = %s, status = %s WHERE id = %s", (new_qty, new_status, item_id))
         cursor.execute("""
             UPDATE borrow_logs 
-            SET status = 'BORROWED', issued_by = ? 
-            WHERE id = ?
+            SET status = 'BORROWED', issued_by = %s 
+            WHERE id = %s
         """, (session["username"], borrow_id))
         conn.commit()
 
@@ -461,7 +446,7 @@ def return_borrowed_item(borrow_id):
 
     with closing(get_connection()) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT item_id, quantity_borrowed, status FROM borrow_logs WHERE id = ?", (borrow_id,))
+        cursor.execute("SELECT item_id, quantity_borrowed, status FROM borrow_logs WHERE id = %s", (borrow_id,))
         borrow = cursor.fetchone()
 
         if not borrow or borrow[2] != "BORROWED":
@@ -470,8 +455,8 @@ def return_borrowed_item(borrow_id):
 
         item_id, qty_borrowed, _ = borrow
 
-        cursor.execute("UPDATE inventory SET quantity = quantity + ?, status = 'AVAILABLE' WHERE id = ?", (qty_borrowed, item_id))
-        cursor.execute("UPDATE borrow_logs SET status = 'RETURNED', actual_return_date = ? WHERE id = ?", (now, borrow_id))
+        cursor.execute("UPDATE inventory SET quantity = quantity + %s, status = 'AVAILABLE' WHERE id = %s", (qty_borrowed, item_id))
+        cursor.execute("UPDATE borrow_logs SET status = 'RETURNED', actual_return_date = %s WHERE id = %s", (now, borrow_id))
         conn.commit()
 
     log_audit_action(session["username"], "RETURN_ITEM", f"Returned transaction ID #{borrow_id}")
@@ -490,35 +475,23 @@ def maintenance():
 
     with closing(get_connection()) as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS maintenance_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id INTEGER,
-                item_name TEXT,
-                issue_description TEXT,
-                reported_by TEXT,
-                report_date TEXT,
-                status TEXT,
-                resolution_notes TEXT
-            )
-        """)
-        conn.commit()
-
-        cursor.execute("SELECT id, item_id, item_name, issue_description, reported_by, report_date, status, resolution_notes FROM maintenance_logs ORDER BY report_date DESC")
+        cursor.execute("SELECT id, item_name, serial_number, vendor, issue_description, repair_cost, status, logged_by, logged_at, resolved_at FROM maintenance ORDER BY logged_at DESC")
         logs = []
         for row in cursor.fetchall():
             logs.append({
                 "id": row[0],
-                "item_id": row[1],
-                "item_name": row[2],
-                "issue_description": row[3],
-                "reported_by": row[4],
-                "report_date": row[5],
+                "item_name": row[1],
+                "serial_number": row[2],
+                "vendor": row[3],
+                "issue_description": row[4],
+                "repair_cost": row[5],
                 "status": row[6],
-                "resolution_notes": row[7] or "N/A"
+                "logged_by": row[7],
+                "logged_at": row[8],
+                "resolved_at": row[9] or "N/A"
             })
             
-        cursor.execute("SELECT id, item_name FROM inventory")
+        cursor.execute("SELECT id, item_name, serial_number FROM inventory")
         items = cursor.fetchall()
 
     return render_template("maintenance.html", logs=logs, items=items)
@@ -531,27 +504,29 @@ def add_maintenance():
         return redirect(url_for("login"))
 
     item_id = int(request.form.get("item_id", 0))
+    vendor = request.form.get("vendor", "N/A").strip()
     issue_description = request.form.get("issue_description", "").strip()
-    reported_by = session["username"]
+    repair_cost = float(request.form.get("repair_cost", 0.0))
+    logged_by = session["username"]
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with closing(get_connection()) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT item_name FROM inventory WHERE id = ?", (item_id,))
+        cursor.execute("SELECT item_name, serial_number FROM inventory WHERE id = %s", (item_id,))
         item = cursor.fetchone()
         
         if not item:
             flash("Selected item not found.", "danger")
             return redirect(url_for("maintenance"))
             
-        item_name = item[0]
+        item_name, serial_number = item
 
         cursor.execute("""
-            INSERT INTO maintenance_logs (item_id, item_name, issue_description, reported_by, report_date, status)
-            VALUES (?, ?, ?, ?, ?, 'PENDING')
-        """, (item_id, item_name, issue_description, reported_by, now))
+            INSERT INTO maintenance (item_name, serial_number, vendor, issue_description, repair_cost, status, logged_by, logged_at)
+            VALUES (%s, %s, %s, %s, %s, 'PENDING', %s, %s)
+        """, (item_name, serial_number, vendor, issue_description, repair_cost, logged_by, now))
         
-        cursor.execute("UPDATE inventory SET status = 'MAINTENANCE' WHERE id = ?", (item_id,))
+        cursor.execute("UPDATE inventory SET status = 'MAINTENANCE' WHERE id = %s", (item_id,))
         conn.commit()
 
     log_audit_action(session["username"], "REPORT_MAINTENANCE", f"Reported maintenance issue for {item_name}")
@@ -566,22 +541,22 @@ def resolve_maintenance(log_id):
         flash("Unauthorized action.", "danger")
         return redirect(url_for("maintenance"))
 
-    resolution_notes = request.form.get("resolution_notes", "").strip()
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     with closing(get_connection()) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT item_id FROM maintenance_logs WHERE id = ?", (log_id,))
+        cursor.execute("SELECT serial_number FROM maintenance WHERE id = %s", (log_id,))
         row = cursor.fetchone()
         
         if row:
-            item_id = row[0]
+            serial_number = row[0]
             cursor.execute("""
-                UPDATE maintenance_logs 
-                SET status = 'RESOLVED', resolution_notes = ? 
-                WHERE id = ?
-            """, (resolution_notes, log_id))
+                UPDATE maintenance 
+                SET status = 'COMPLETED', resolved_at = %s 
+                WHERE id = %s
+            """, (now, log_id))
             
-            cursor.execute("UPDATE inventory SET status = 'AVAILABLE' WHERE id = ?", (item_id,))
+            cursor.execute("UPDATE inventory SET status = 'AVAILABLE' WHERE serial_number = %s", (serial_number,))
             conn.commit()
 
     log_audit_action(session["username"], "RESOLVE_MAINTENANCE", f"Resolved maintenance ticket ID #{log_id}")
@@ -614,7 +589,7 @@ def unlock_user(user_id):
 
     with closing(get_connection()) as conn:
         cursor = conn.cursor()
-        cursor.execute("UPDATE users SET is_locked=0, failed_attempts=0 WHERE id=?", (user_id,))
+        cursor.execute("UPDATE users SET is_locked=0, failed_attempts=0 WHERE id=%s", (user_id,))
         conn.commit()
 
     log_audit_action(session["username"], "UNLOCK_ACCOUNT", f"Unlocked User ID #{user_id}")
@@ -661,7 +636,7 @@ def profile():
         else:
             with closing(get_connection()) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT password_hash, salt FROM users WHERE username=?", (username,))
+                cursor.execute("SELECT password_hash, salt FROM users WHERE username=%s", (username,))
                 row = cursor.fetchone()
 
                 if row:
@@ -669,7 +644,7 @@ def profile():
                     calc_hash, _ = hash_password(old_p, salt)
                     if calc_hash == stored_hash:
                         new_hash, new_salt = hash_password(new_p)
-                        cursor.execute("UPDATE users SET password_hash=?, salt=? WHERE username=?", (new_hash, new_salt, username))
+                        cursor.execute("UPDATE users SET password_hash=%s, salt=%s WHERE username=%s", (new_hash, new_salt, username))
                         conn.commit()
                         log_audit_action(username, "CHANGE_PASSWORD", "User updated password")
                         flash("Password updated successfully!", "success")
@@ -678,7 +653,7 @@ def profile():
 
     with closing(get_connection()) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT username, email, role FROM users WHERE username=?", (username,))
+        cursor.execute("SELECT username, email, role FROM users WHERE username=%s", (username,))
         user_info = cursor.fetchone()
 
     return render_template("profile.html", user=user_info)
