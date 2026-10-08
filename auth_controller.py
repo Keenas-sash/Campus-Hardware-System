@@ -103,26 +103,36 @@ class AuthController:
         except Exception as e:
             return False, f"Database Failure: {str(e)}"
             
-    def request_password_reset(self, username: str, email: str, proposed_pass: str, reason: str):
+    def execute_password_reset(self, username: str, email: str, new_password_raw: str):
+        """Directly resets password and unlocks account upon successful OTP verification."""
         try:
-            validated_data = ResetRequestSchema(
-                username=username,
-                email=email,
-                proposed_password=proposed_pass,
-                reason=reason
-            )
-        except ValidationError as e:
-            error_msg = e.errors()[0]['msg']
-            return False, error_msg
+            with closing(get_connection()) as conn:
+                cursor = conn.cursor()
 
-        p_hash, salt = hash_password(validated_data.proposed_password)
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # Verify user exists with matching username and email
+                cursor.execute(
+                    "SELECT id FROM users WHERE LOWER(username) = LOWER(%s) AND LOWER(email) = LOWER(%s)",
+                    (username, email)
+                )
+                user = cursor.fetchone()
+                if not user:
+                    return False, "No account found matching this username and email address."
 
-        with closing(get_connection()) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO reset_requests (username, email, proposed_password, reason, requested_at) VALUES (%s, %s, %s, %s, %s)",
-                (validated_data.username, validated_data.email, p_hash, validated_data.reason, now)
-            )
-            conn.commit()
-        return True, "Unlock/Reset request submitted to system admin."
+                # Hash new password
+                p_hash, salt = hash_password(new_password_raw)
+
+                # Update password, reset failed attempts, and unlock account in Supabase
+                cursor.execute(
+                    """
+                    UPDATE users 
+                    SET password_hash = %s, salt = %s, failed_attempts = 0, is_locked = 0 
+                    WHERE LOWER(username) = LOWER(%s)
+                    """,
+                    (p_hash, salt, username)
+                )
+                conn.commit()
+                return True, "Password updated and account unlocked successfully!"
+
+        except Exception as e:
+            print(f"[Reset Exception]: {e}")
+            return False, f"Database Error: {str(e)}"
