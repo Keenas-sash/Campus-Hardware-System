@@ -114,40 +114,49 @@ def login():
     return render_template("login.html")
 
 
-@app.route("/register", methods=["GET", "POST"]) 
-def register(): 
-    if request.method == "GET": 
-        return render_template("register.html") 
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "").strip()
+        hint = request.form.get("hint", "").strip()
+        role = request.form.get("role", "VIEWER").strip()
 
-    username = request.form.get("username", "").strip() 
-    email = request.form.get("email", "").strip() 
-    password = request.form.get("password", "").strip() 
-    hint = request.form.get("hint", "").strip()
-    role = request.form.get("role", "VIEWER").strip().upper() 
+        # Validate with Pydantic schema
+        try:
+            UserRegisterSchema(
+                username=username,
+                email=email,
+                password=password,
+                hint=hint,
+                role=role
+            )
+        except ValidationError as e:
+            error_msg = e.errors()[0]['msg']
+            flash(f"Registration Error: {error_msg}", "danger")
+            return render_template("register.html")
 
-    if not username or not email or not password: 
-        flash("All registration fields are required.", "danger") 
-        return redirect(url_for("login")) 
+        # Generate OTP
+        otp = f"{random.randint(100000, 999999)}"
+        session['pending_user'] = {
+            'username': username,
+            'email': email,
+            'password': password,
+            'hint': hint,
+            'role': role,
+            'otp': otp
+        }
 
-    otp = str(random.randint(100000, 999999)) 
-    session['pending_user'] = {
-        'username': username, 
-        'email': email, 
-        'password': password, 
-        'hint': hint, 
-        'role': role, 
-        'otp': otp
-    } 
+        if send_otp_email(email, otp, "Account Registration Verification"):
+            flash("Verification code sent! Please check your email.", "info")
+            return redirect(url_for("verify_otp", action="register"))
+        else:
+            flash("Failed to send OTP code. Please check your email address.", "danger")
+            return render_template("register.html")
 
-    email_sent = send_otp_email(email, otp, intent="Account Registration")
+    return render_template("register.html")
 
-    if email_sent:
-        flash("We sent a 6-digit code to your email. Please verify.", "info")
-    else:
-        # Fallback in local/testing mode so user can proceed to verification screen
-        flash(f"Verification code generated ({otp}). Please verify your account.", "warning")
-
-    return redirect(url_for("verify_otp", action="register"))
 
 @app.route("/reset-request", methods=["GET", "POST"])
 def reset_request():
@@ -156,10 +165,6 @@ def reset_request():
         email = request.form.get("email", "").strip()
         new_password = request.form.get("new_password", "").strip()
         confirm_password = request.form.get("confirm_password", "").strip()
-
-        if not username or not email or not new_password or not confirm_password:
-            flash("All fields are required.", "danger")
-            return render_template("reset_request.html")
 
         if new_password != confirm_password:
             flash("Passwords do not match.", "danger")
