@@ -183,7 +183,6 @@ def reset_request():
 
     return redirect(url_for("verify_otp", action="reset"))
 
-
 @app.route("/verify-otp/<action>", methods=["GET", "POST"]) 
 def verify_otp(action): 
     session_key = 'pending_user' if action == "register" else 'pending_reset' 
@@ -202,11 +201,18 @@ def verify_otp(action):
                     email=data['email'], 
                     password_raw=data['password'], 
                     hint=data.get('hint', ''), 
-                    role=data['role']
+                    role=data.get('role', 'VIEWER')
                 ) 
-                session.pop(session_key, None) 
-                flash("Account successfully verified and created!", "success" if ok else "warning") 
-                return redirect(url_for("login")) 
+                
+                # ONLY pop session and redirect to login if database registration succeeded
+                if ok:
+                    session.pop(session_key, None) 
+                    flash("Account successfully verified and created! You can now log in.", "success") 
+                    return redirect(url_for("login")) 
+                else:
+                    # Keep pending session intact and display the exact database/schema error
+                    flash(f"Account Creation Failed: {msg}", "danger")
+                    return redirect(url_for("verify_otp", action=action))
 
             elif action == "reset": 
                 ok, msg = auth.request_password_reset(
@@ -215,12 +221,16 @@ def verify_otp(action):
                     proposed_pass=data['new_password'], 
                     reason="OTP Verified Password Reset"
                 ) 
-                session.pop(session_key, None) 
-                flash("Email verified! Your password reset request has been submitted.", "success" if ok else "danger") 
-                return redirect(url_for("login")) 
+                if ok:
+                    session.pop(session_key, None) 
+                    flash("Email verified! Your password reset request has been submitted.", "success") 
+                    return redirect(url_for("login")) 
+                else:
+                    flash(f"Reset Failed: {msg}", "danger")
+                    return redirect(url_for("verify_otp", action=action))
                 
         else: 
-            flash("Invalid OTP code. Try again.", "danger") 
+            flash("Invalid OTP code. Please try again.", "danger") 
             
     try:
         return render_template("otp_verify.html", action_url=url_for('verify_otp', action=action))
