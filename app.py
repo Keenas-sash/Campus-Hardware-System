@@ -113,7 +113,6 @@ def login():
             
     return render_template("login.html")
 
-
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -136,6 +135,9 @@ def register():
             error_msg = e.errors()[0]['msg']
             flash(f"Registration Error: {error_msg}", "danger")
             return render_template("register.html")
+        except Exception as e:
+            flash(f"Validation Error: {str(e)}", "danger")
+            return render_template("register.html")
 
         # Generate OTP
         otp = f"{random.randint(100000, 999999)}"
@@ -148,11 +150,17 @@ def register():
             'otp': otp
         }
 
-        if send_otp_email(email, otp, "Account Registration Verification"):
-            flash("Verification code sent! Please check your email.", "info")
-            return redirect(url_for("verify_otp", action="register"))
-        else:
-            flash("Failed to send OTP code. Please check your email address.", "danger")
+        # Send OTP safely
+        try:
+            if send_otp_email(email, otp, "Account Registration Verification"):
+                flash("Verification code sent! Please check your email.", "info")
+                return redirect(url_for("verify_otp", action="register"))
+            else:
+                flash("Failed to send OTP code. Please check your email address or SMTP configuration.", "danger")
+                return render_template("register.html")
+        except Exception as e:
+            print(f"[SMTP Send Exception]: {e}")
+            flash("Error sending verification email. Please try again later.", "danger")
             return render_template("register.html")
 
     return render_template("register.html")
@@ -165,6 +173,10 @@ def reset_request():
         email = request.form.get("email", "").strip()
         new_password = request.form.get("new_password", "").strip()
         confirm_password = request.form.get("confirm_password", "").strip()
+
+        if not username or not email or not new_password or not confirm_password:
+            flash("All fields are required.", "danger")
+            return render_template("reset_request.html")
 
         if new_password != confirm_password:
             flash("Passwords do not match.", "danger")
@@ -180,6 +192,9 @@ def reset_request():
             error_msg = e.errors()[0]['msg']
             flash(f"Password Error: {error_msg}", "danger")
             return render_template("reset_request.html")
+        except Exception as e:
+            flash(f"Validation Error: {str(e)}", "danger")
+            return render_template("reset_request.html")
 
         otp = f"{random.randint(100000, 999999)}"
         session['pending_reset'] = {
@@ -189,14 +204,20 @@ def reset_request():
             'otp': otp
         }
 
-        if send_otp_email(email, otp, "Password Reset & Account Unlock"):
-            flash("Verification code sent! Please check your email.", "info")
-            return redirect(url_for("verify_otp", action="reset"))
-        else:
-            flash("Failed to send OTP code. Please verify SMTP settings.", "danger")
+        try:
+            if send_otp_email(email, otp, "Password Reset & Account Unlock"):
+                flash("Verification code sent! Please check your email.", "info")
+                return redirect(url_for("verify_otp", action="reset"))
+            else:
+                flash("Failed to send OTP code. Please verify Brevo SMTP settings.", "danger")
+                return render_template("reset_request.html")
+        except Exception as e:
+            print(f"[SMTP Send Exception]: {e}")
+            flash("Error sending verification email. Please try again later.", "danger")
             return render_template("reset_request.html")
 
     return render_template("reset_request.html")
+
 
 @app.route("/verify-otp/<action>", methods=["GET", "POST"]) 
 def verify_otp(action): 
@@ -210,48 +231,52 @@ def verify_otp(action):
         data = session[session_key] 
 
         if user_otp == data['otp']: 
-            if action == "register": 
-                ok, msg = auth.register_user(
-                    username=data['username'], 
-                    email=data['email'], 
-                    password_raw=data['password'], 
-                    hint=data.get('hint', ''), 
-                    role=data.get('role', 'VIEWER')
-                ) 
-                
-                # ONLY pop session and redirect to login if database registration succeeded
-                if ok:
-                    session.pop(session_key, None) 
-                    flash("Account successfully verified and created! You can now log in.", "success") 
-                    return redirect(url_for("login")) 
-                else:
-                    # Keep pending session intact and display the exact database/schema error
-                    flash(f"Account Creation Failed: {msg}", "danger")
-                    return redirect(url_for("verify_otp", action=action))
+            try:
+                if action == "register": 
+                    ok, msg = auth.register_user(
+                        username=data['username'], 
+                        email=data['email'], 
+                        password_raw=data['password'], 
+                        hint=data.get('hint', ''), 
+                        role=data.get('role', 'VIEWER')
+                    ) 
+                    
+                    if ok:
+                        session.pop(session_key, None) 
+                        flash("Account successfully verified and created! You can now log in.", "success") 
+                        return redirect(url_for("login")) 
+                    else:
+                        flash(f"Account Creation Failed: {msg}", "danger")
+                        return redirect(url_for("verify_otp", action=action))
 
-            elif action == "reset": 
-                ok, msg = auth.execute_password_reset(
-                    username=data['username'], 
-                    email=data['email'], 
-                    new_password_raw=data['new_password']
-                ) 
-                if ok:
-                    session.pop(session_key, None) 
-                    flash("Password reset successfully! Your account is unlocked and ready for login.", "success") 
-                    return redirect(url_for("login")) 
-                
-                else:
-                    flash(f"Reset Failed: {msg}", "danger")
-                    return redirect(url_for("verify_otp", action=action))
+                elif action == "reset": 
+                    ok, msg = auth.execute_password_reset(
+                        username=data['username'], 
+                        email=data['email'], 
+                        new_password_raw=data['new_password']
+                    ) 
+                    if ok:
+                        session.pop(session_key, None) 
+                        flash("Password reset successfully! Your account is unlocked and ready for login.", "success") 
+                        return redirect(url_for("login")) 
+                    else:
+                        flash(f"Reset Failed: {msg}", "danger")
+                        return redirect(url_for("verify_otp", action=action))
+            except Exception as e:
+                print(f"[Verify OTP Processing Exception]: {e}")
+                traceback.print_exc()
+                flash(f"Processing Error: {str(e)}", "danger")
+                return redirect(url_for("verify_otp", action=action))
                 
         else: 
             flash("Invalid OTP code. Please try again.", "danger") 
-            
+            return redirect(url_for("verify_otp", action=action))
+
     try:
         return render_template("otp_verify.html", action_url=url_for('verify_otp', action=action))
     except Exception as e:
         print(f"Template load error: {e}")
-        # Inline HTML fallback to prevent HTTP 500 crash if otp_verify.html is missing
+        # Inline HTML fallback with flash messages supported
         return f'''
         <!DOCTYPE html>
         <html>
@@ -263,6 +288,7 @@ def verify_otp(action):
             <div class="card p-4 shadow-sm" style="max-width: 400px; width: 100%;">
                 <h4 class="text-center fw-bold mb-3">Verify Your Email</h4>
                 <p class="text-muted small text-center">Enter the 6-digit verification code sent to your email.</p>
+                
                 <form method="POST" action="{url_for('verify_otp', action=action)}">
                     <div class="mb-3">
                         <input type="text" name="otp_code" maxlength="6" class="form-control text-center fw-bold fs-4" placeholder="123456" required autofocus>
