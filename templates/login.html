@@ -51,44 +51,34 @@
 <div class="modal fade" id="registerModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form action="/register" method="POST">
-        <div class="modal-header">
-          <h5 class="modal-title">Create Account</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-2">
-            <label class="form-label">Username</label>
-            <input type="text" name="username" class="form-control" maxlength="20" required>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Email</label>
-            <input type="email" name="email" class="form-control" maxlength="50" required>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Password</label>
-            <input type="password" name="password" class="form-control" maxlength="20" required>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Password Hint</label>
-            <input type="text" name="hint" class="form-control" maxlength="100">
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Role Assignment</label>
-            <select name="role" class="form-select">
-                <option value="VIEWER">Viewer</option>
-                <option value="INVENTORY_SPECIALIST">Inventory Specialist</option>
-                <option value="ADMIN">Admin</option>
-            </select>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Submit Registration</button>
-        </div>
-      </form>
+   <!-- Inside login.html Modal Form -->
+<form action="/register" method="POST">
+    <div class="mb-3">
+        <label class="form-label">Username</label>
+        <input type="text" name="username" class="form-control" required>
     </div>
-  </div>
-</div>
+    <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" class="form-control" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Password</label>
+        <input type="password" name="password" class="form-control" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Password Hint</label>
+        <input type="text" name="hint" class="form-control" required>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Role Assignment</label>
+        <select name="role" class="form-select">
+            <option value="VIEWER" selected>Viewer</option>
+            <option value="INVENTORY_SPECIALIST">Inventory Specialist</option>
+            <option value="ADMIN">Admin</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary w-100">Send Verification Code &rarr;</button>
+</form>
 
 <!-- Reset Password Modal -->
 <div class="modal fade" id="resetModal" tabindex="-1">
