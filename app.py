@@ -159,13 +159,12 @@ def reset_request():
 
         if not username or not email or not new_password or not confirm_password:
             flash("All fields are required.", "danger")
-            return redirect(url_for("login"))
+            return render_template("reset_request.html")
 
         if new_password != confirm_password:
             flash("Passwords do not match.", "danger")
-            return redirect(url_for("login"))
+            return render_template("reset_request.html")
 
-        # Pre-validate proposed password using Pydantic schema
         try:
             ResetRequestSchema(
                 username=username,
@@ -175,9 +174,8 @@ def reset_request():
         except ValidationError as e:
             error_msg = e.errors()[0]['msg']
             flash(f"Password Error: {error_msg}", "danger")
-            return redirect(url_for("login"))
+            return render_template("reset_request.html")
 
-        # Generate OTP
         otp = f"{random.randint(100000, 999999)}"
         session['pending_reset'] = {
             'username': username,
@@ -186,15 +184,14 @@ def reset_request():
             'otp': otp
         }
 
-        # Send OTP email
         if send_otp_email(email, otp, "Password Reset & Account Unlock"):
             flash("Verification code sent! Please check your email.", "info")
             return redirect(url_for("verify_otp", action="reset"))
         else:
-            flash("Failed to send OTP code. Please check your email address.", "danger")
-            return redirect(url_for("login"))
+            flash("Failed to send OTP code. Please verify SMTP settings.", "danger")
+            return render_template("reset_request.html")
 
-    return render_template("login.html")
+    return render_template("reset_request.html")
 
 @app.route("/verify-otp/<action>", methods=["GET", "POST"]) 
 def verify_otp(action): 
