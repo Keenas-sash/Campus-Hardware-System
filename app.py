@@ -228,16 +228,16 @@ def verify_otp(action):
                     return redirect(url_for("verify_otp", action=action))
 
             elif action == "reset": 
-                ok, msg = auth.request_password_reset(
+                ok, msg = auth.execute_password_reset(
                     username=data['username'], 
                     email=data['email'], 
-                    proposed_pass=data['new_password'], 
-                    reason="OTP Verified Password Reset"
+                    new_password_raw=data['new_password']
                 ) 
                 if ok:
                     session.pop(session_key, None) 
-                    flash("Email verified! Your password reset request has been submitted.", "success") 
+                    flash("Password reset successfully! Your account is unlocked and ready for login.", "success") 
                     return redirect(url_for("login")) 
+                
                 else:
                     flash(f"Reset Failed: {msg}", "danger")
                     return redirect(url_for("verify_otp", action=action))
