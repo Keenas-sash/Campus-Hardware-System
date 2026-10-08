@@ -25,9 +25,9 @@ app.secret_key = os.urandom(24)
 
 # --- BREVO SMTP CONFIGURATION --- 
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp-relay.brevo.com") 
-SMTP_PORT = int(os.getenv("SMTP_PORT", 2525)) 
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587)) 
 
-SMTP_LOGIN = os.getenv("bbf9f5001@smtp-brevo.com")        
+SMTP_LOGIN = os.getenv("SMTP_LOGIN")        
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  
 SENDER_EMAIL = os.getenv("earljmiciano7@gmail.com", SMTP_LOGIN)
 
