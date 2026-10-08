@@ -220,8 +220,35 @@ def verify_otp(action):
         else: 
             flash("Invalid OTP code. Try again.", "danger") 
             
-    return render_template("otp_verify.html", action_url=url_for('verify_otp', action=action)) 
-
+    try:
+        return render_template("otp_verify.html", action_url=url_for('verify_otp', action=action))
+    except Exception as e:
+        print(f"Template load error: {e}")
+        # Inline HTML fallback to prevent HTTP 500 crash if otp_verify.html is missing
+        return f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Verify Email</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        </head>
+        <body class="bg-light d-flex align-items-center justify-content-center vh-100">
+            <div class="card p-4 shadow-sm" style="max-width: 400px; width: 100%;">
+                <h4 class="text-center fw-bold mb-3">Verify Your Email</h4>
+                <p class="text-muted small text-center">Enter the 6-digit verification code sent to your email.</p>
+                <form method="POST" action="{url_for('verify_otp', action=action)}">
+                    <div class="mb-3">
+                        <input type="text" name="otp_code" maxlength="6" class="form-control text-center fw-bold fs-4" placeholder="123456" required autofocus>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Verify Code &rarr;</button>
+                </form>
+                <div class="text-center mt-3">
+                    <a href="{url_for('login')}" class="small text-decoration-none">&larr; Back to Login</a>
+                </div>
+            </div>
+        </body>
+        </html>
+        '''
 
 @app.route("/logout")
 def logout():
