@@ -29,7 +29,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 
 SMTP_LOGIN = os.getenv("SMTP_LOGIN")        
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  
-SENDER_EMAIL = os.getenv("MAIL_DEFAULT_SENDER", "your-verified-sender@example.com")
+SENDER_EMAIL = os.getenv("MAIL_DEFAULT_SENDER", SMTP_LOGIN)
 
 def send_otp_email(receiver_email, otp, intent): 
     """Sends a 6-digit OTP using Brevo SMTP.""" 
@@ -38,17 +38,17 @@ def send_otp_email(receiver_email, otp, intent):
         "Please enter this code to proceed. Do not share this code with anyone."
     ) 
     msg['Subject'] = f"Laboratory System - {intent} OTP" 
-    msg['From'] = SENDER_EMAIL 
+    msg['From'] = SENDER_EMAIL if SENDER_EMAIL else SMTP_LOGIN
     msg['To'] = receiver_email 
 
     try: 
         if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
                 if SMTP_LOGIN and SMTP_PASSWORD:
                     server.login(SMTP_LOGIN, SMTP_PASSWORD)
                 server.send_message(msg)
         else:
-            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
                 server.starttls()
                 if SMTP_LOGIN and SMTP_PASSWORD:
                     server.login(SMTP_LOGIN, SMTP_PASSWORD)
@@ -56,9 +56,9 @@ def send_otp_email(receiver_email, otp, intent):
             
         return True 
     except Exception as e: 
-        print(f"Email Error: {e}") 
+        print(f"SMTP Error encountered during email dispatch: {e}") 
         return False 
-        
+
 # Initialize Database on Startup
 init_db()
 
@@ -116,6 +116,7 @@ def register():
     username = request.form.get("username", "").strip() 
     email = request.form.get("email", "").strip() 
     password = request.form.get("password", "").strip() 
+    hint = request.form.get("hint", "").strip()
     role = request.form.get("role", "USER").strip().upper() 
 
     if not username or not email or not password: 
@@ -124,13 +125,13 @@ def register():
 
     # Generate OTP and save to session 
     otp = str(random.randint(100000, 999999)) 
-    session['pending_user'] = {'username': username, 'email': email, 'password': password, 'role': role, 'otp': otp} 
+    session['pending_user'] = {'username': username, 'email': email, 'password': password, 'hint': hint, 'role': role, 'otp': otp} 
 
     if send_otp_email(email, otp, intent="Account Registration"): 
         flash("We sent a 6-digit code to your email. Please verify.", "info") 
         return redirect(url_for("verify_otp", action="register")) 
     else: 
-        flash("Failed to send OTP email. Please try again.", "danger") 
+        flash("Failed to send OTP email. Check server logs for details.", "danger") 
         return redirect(url_for("register")) 
 
 
@@ -177,13 +178,14 @@ def verify_otp(action):
 
         if user_otp == data['otp']: 
             if action == "register": 
-                ok, msg = auth.register_user(data['username'], data['email'], data['password'], role=data['role']) 
+                # Corrected parameter alignment for AuthController
+                ok, msg = auth.register_user(data['username'], data['email'], data['password'], data.get('hint', ''), data['role']) 
                 session.pop(session_key, None) 
                 flash("Account successfully verified and created!", "success" if ok else "warning") 
                 return redirect(url_for("login")) 
 
             elif action == "reset": 
-                ok, msg = auth.submit_password_reset_request(data['username'], data['email'], data['new_password']) 
+                ok, msg = auth.request_password_reset(data['username'], data['email'], data['new_password'], "OTP Reset") 
                 session.pop(session_key, None) 
                 flash("Email verified! Your password reset request has been submitted.", "success" if ok else "danger") 
                 return redirect(url_for("login")) 
