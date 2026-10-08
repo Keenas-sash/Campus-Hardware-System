@@ -22,7 +22,7 @@ def hash_password(password: str, salt: Optional[str] = None):
     return calc_hash, salt
 
 def init_db():
-    """Initializes users, reset_requests, inventory, maintenance_logs, borrow_logs, and audit_logs tables."""
+    """Initializes users, reset_requests, inventory, maintenance, borrow_logs, and audit_logs tables."""
     with closing(get_connection()) as conn:
         cursor = conn.cursor()
         
@@ -136,6 +136,7 @@ class UserRegisterSchema(BaseModel):
     username: str = Field(..., min_length=3, max_length=20)
     email: str = Field(..., min_length=6, max_length=50)
     password: str = Field(..., min_length=8)
+    hint: Optional[str] = Field(default="", max_length=100)
     role: str = Field(default="VIEWER")
 
     @field_validator("username")
