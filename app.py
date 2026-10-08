@@ -17,7 +17,7 @@ from flask import (
     Response,
 )
 
-from db_models import get_connection, hash_password, init_db
+from db_models import get_connection, hash_password, init_db, UserRegisterSchema, ResetRequestSchema
 from auth_controller import AuthController
 
 auth = AuthController()
