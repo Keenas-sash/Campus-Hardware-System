@@ -29,12 +29,13 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 
 SMTP_LOGIN = os.getenv("SMTP_LOGIN")        
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  
-SENDER_EMAIL = os.getenv("earljmiciano7@gmail.com", SMTP_LOGIN)
+# Reads from environment variable MAIL_DEFAULT_SENDER, defaulting to your verified Brevo sender
+SENDER_EMAIL = os.getenv("MAIL_DEFAULT_SENDER", "earljmiciano7@gmail.com")
 
 def send_otp_email(receiver_email, otp, intent): 
-    """Sends a 6-digit OTP using Brevo SMTP.""" 
+    """Sends a 6-digit OTP to ANY recipient using a verified Brevo sender.""" 
     if not SMTP_LOGIN or not SMTP_PASSWORD:
-        print("SMTP Warning: Missing SMTP_LOGIN or SMTP_PASSWORD environment variables.")
+        print("SMTP Warning: Missing SMTP credentials.")
         return False
 
     msg = MIMEText(
@@ -42,8 +43,8 @@ def send_otp_email(receiver_email, otp, intent):
         "Please enter this code to proceed. Do not share this code with anyone."
     ) 
     msg['Subject'] = f"Laboratory System - {intent} OTP" 
-    msg['From'] = SENDER_EMAIL if SENDER_EMAIL else SMTP_LOGIN
-    msg['To'] = receiver_email 
+    msg['From'] = SENDER_EMAIL       # Fixed authorized sender
+    msg['To'] = receiver_email       # Dynamic user recipient
 
     try: 
         if SMTP_PORT == 465:
@@ -56,10 +57,11 @@ def send_otp_email(receiver_email, otp, intent):
                 server.login(SMTP_LOGIN, SMTP_PASSWORD)
                 server.send_message(msg)
             
+        print(f"OTP successfully sent to {receiver_email}")
         return True 
     except Exception as e: 
         print(f"SMTP Dispatch Error: {e}") 
-        return False 
+        return False
 
 # Initialize Database on Startup
 init_db()
