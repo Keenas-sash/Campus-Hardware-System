@@ -149,41 +149,52 @@ def register():
 
     return redirect(url_for("verify_otp", action="register"))
 
+@app.route("/reset-request", methods=["GET", "POST"])
+def reset_request():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
+        new_password = request.form.get("new_password", "").strip()
+        confirm_password = request.form.get("confirm_password", "").strip()
 
-@app.route("/reset-request", methods=["GET", "POST"]) 
-def reset_request(): 
-    if request.method == "GET": 
-        return render_template("reset.html") 
-        
-    username = request.form.get("username", "").strip() 
-    email = request.form.get("email", "").strip() 
-    new_password = request.form.get("new_password", "").strip() 
-    confirm_password = request.form.get("confirm_password", "").strip() 
+        if not username or not email or not new_password or not confirm_password:
+            flash("All fields are required.", "danger")
+            return redirect(url_for("login"))
 
-    if not username or not email or not new_password or not confirm_password: 
-        flash("All reset fields are required.", "danger") 
-        return redirect(url_for("reset_request")) 
+        if new_password != confirm_password:
+            flash("Passwords do not match.", "danger")
+            return redirect(url_for("login"))
 
-    if new_password != confirm_password: 
-        flash("New passwords do not match.", "danger") 
-        return redirect(url_for("reset_request")) 
-        
-    otp = str(random.randint(100000, 999999)) 
-    session['pending_reset'] = {
-        'username': username, 
-        'email': email, 
-        'new_password': new_password, 
-        'otp': otp
-    } 
+        # Pre-validate proposed password using Pydantic schema
+        try:
+            ResetRequestSchema(
+                username=username,
+                email=email,
+                proposed_password=new_password
+            )
+        except ValidationError as e:
+            error_msg = e.errors()[0]['msg']
+            flash(f"Password Error: {error_msg}", "danger")
+            return redirect(url_for("login"))
 
-    email_sent = send_otp_email(email, otp, intent="Password Reset")
+        # Generate OTP
+        otp = f"{random.randint(100000, 999999)}"
+        session['pending_reset'] = {
+            'username': username,
+            'email': email,
+            'new_password': new_password,
+            'otp': otp
+        }
 
-    if email_sent:
-        flash("We sent a 6-digit code to your email. Please verify.", "info")
-    else:
-        flash(f"Reset OTP code generated ({otp}). Please enter to verify.", "warning")
+        # Send OTP email
+        if send_otp_email(email, otp, "Password Reset & Account Unlock"):
+            flash("Verification code sent! Please check your email.", "info")
+            return redirect(url_for("verify_otp", action="reset"))
+        else:
+            flash("Failed to send OTP code. Please check your email address.", "danger")
+            return redirect(url_for("login"))
 
-    return redirect(url_for("verify_otp", action="reset"))
+    return render_template("login.html")
 
 @app.route("/verify-otp/<action>", methods=["GET", "POST"]) 
 def verify_otp(action): 
