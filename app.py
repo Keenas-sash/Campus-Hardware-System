@@ -20,6 +20,8 @@ from flask import (
 from db_models import get_connection, hash_password, init_db
 from auth_controller import AuthController
 
+auth = AuthController()
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
